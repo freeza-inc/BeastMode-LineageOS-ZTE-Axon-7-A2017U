@@ -233,6 +233,7 @@ struct dwc3_msm {
 #define MDWC3_ASYNC_IRQ_WAKE_CAPABILITY	BIT(1)
 #define MDWC3_POWER_COLLAPSE		BIT(2)
 
+	bool			xo_vote_for_charger;
 	unsigned int		irq_to_affin;
 	struct notifier_block	dwc3_cpu_notifier;
 	struct notifier_block	usbdev_nb;
@@ -708,7 +709,7 @@ static int dwc3_msm_ep_queue(struct usb_ep *ep,
 	spin_lock_irqsave(&dwc->lock, flags);
 	if (!dep->endpoint.desc) {
 		dev_err(mdwc->dev,
-			"%s: trying to queue request %p to disabled ep %s\n",
+			"%s: trying to queue request %pK to disabled ep %s\n",
 			__func__, request, ep->name);
 		spin_unlock_irqrestore(&dwc->lock, flags);
 		return -EPERM;
@@ -745,7 +746,7 @@ static int dwc3_msm_ep_queue(struct usb_ep *ep,
 
 	if (dep->number == 0 || dep->number == 1) {
 		dev_err(mdwc->dev,
-			"%s: trying to queue dbm request %p to control ep %s\n",
+			"%s: trying to queue dbm request %pK to control ep %s\n",
 			__func__, request, ep->name);
 		spin_unlock_irqrestore(&dwc->lock, flags);
 		return -EPERM;
@@ -754,7 +755,7 @@ static int dwc3_msm_ep_queue(struct usb_ep *ep,
 	if (dep->busy_slot != dep->free_slot || !list_empty(&dep->request_list)
 					 || !list_empty(&dep->req_queued)) {
 		dev_err(mdwc->dev,
-			"%s: trying to queue dbm request %p tp ep %s\n",
+			"%s: trying to queue dbm request %pK tp ep %s\n",
 			__func__, request, ep->name);
 		spin_unlock_irqrestore(&dwc->lock, flags);
 		return -EPERM;
@@ -777,7 +778,7 @@ static int dwc3_msm_ep_queue(struct usb_ep *ep,
 	list_add_tail(&req_complete->list_item, &mdwc->req_complete_list);
 	request->complete = dwc3_msm_req_complete_func;
 
-	dev_vdbg(dwc->dev, "%s: queing request %p to ep %s length %d\n",
+	dev_vdbg(dwc->dev, "%s: queing request %pK to ep %s length %d\n",
 			__func__, request, ep->name, request->length);
 	size = dwc3_msm_read_reg(mdwc->base, DWC3_GEVNTSIZ(0));
 	dbm_event_buffer_config(mdwc->dbm,
@@ -963,7 +964,7 @@ static void gsi_ring_in_db(struct usb_ep *ep, struct usb_gsi_request *request)
 		dev_dbg(mdwc->dev, "Failed to get GSI DBL address MSB\n");
 
 	offset = dwc3_trb_dma_offset(dep, &dep->trb_pool[num_trbs-1]);
-	dev_dbg(mdwc->dev, "Writing link TRB addr: %pa to %p (%x)\n",
+	dev_dbg(mdwc->dev, "Writing link TRB addr: %pKa to %pK (%x)\n",
 	&offset, gsi_dbl_address_lsb, dbl_lo_addr);
 
 	writel_relaxed(offset, gsi_dbl_address_lsb);
@@ -2089,7 +2090,12 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	 */
 	clk_disable_unprepare(mdwc->iface_clk);
 	/* USB PHY no more requires TCXO */
-	clk_disable_unprepare(mdwc->xo_clk);
+
+	if (!mdwc->xo_vote_for_charger) {
+		clk_disable_unprepare(mdwc->xo_clk);
+				dev_info(mdwc->dev, "%s unvote for TCXO buffer\n",
+				__func__);
+	}
 
 	/* Perform controller power collapse */
 	if (!mdwc->in_host_mode && (!mdwc->vbus_active ||
@@ -2163,10 +2169,17 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	}
 
 	/* Vote for TCXO while waking up USB HSPHY */
-	ret = clk_prepare_enable(mdwc->xo_clk);
-	if (ret)
-		dev_err(mdwc->dev, "%s failed to vote TCXO buffer%d\n",
-						__func__, ret);
+	if (!mdwc->xo_vote_for_charger) {
+		ret = clk_prepare_enable(mdwc->xo_clk);
+		if (ret)
+			dev_info(mdwc->dev, "%s failed to vote TCXO buffer%d\n",
+					__func__, ret);
+		else
+			dev_info(mdwc->dev, "%s vote for TCXO buffer\n",
+					__func__);
+	} else
+		dev_info(mdwc->dev, "%s xo_vote_for_charger = %d\n",
+				__func__, mdwc->xo_vote_for_charger);
 
 	/* Restore controller power collapse */
 	if (mdwc->lpm_flags & MDWC3_POWER_COLLAPSE) {
@@ -3210,7 +3223,7 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	clk_disable_unprepare(mdwc->sleep_clk);
 	clk_disable_unprepare(mdwc->xo_clk);
 	clk_put(mdwc->xo_clk);
-
+	mdwc->xo_vote_for_charger = false;
 	dwc3_msm_config_gdsc(mdwc, 0);
 
 	return 0;
@@ -3470,6 +3483,34 @@ skip_psy_type:
 
 	power_supply_changed(&mdwc->usb_psy);
 	mdwc->max_power = mA;
+	if (mdwc->chg_type == DWC3_DCP_CHARGER) {
+		if (!mdwc->xo_vote_for_charger) {
+			struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+
+			if (atomic_read(&dwc->in_lpm)) {
+				int ret;
+				ret = clk_prepare_enable(mdwc->xo_clk);
+					if (ret)
+						dev_info(mdwc->dev, "%s failed to vote TCXO buffer%d\n",
+								__func__, ret);
+					else
+						dev_info(mdwc->dev, "%s TCXO enabled\n",
+								__func__);
+			}
+			mdwc->xo_vote_for_charger = true;
+		}
+	} else {
+		if (mdwc->xo_vote_for_charger) {
+			struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+
+			if (atomic_read(&dwc->in_lpm)) {
+				clk_disable_unprepare(mdwc->xo_clk);
+				dev_info(mdwc->dev, "%s TCXO disabled\n",
+						__func__);
+			}
+			mdwc->xo_vote_for_charger = false;
+		}
+	}
 	return 0;
 
 psy_error:
