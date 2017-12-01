@@ -130,6 +130,10 @@ EXPORT_SYMBOL(sysctl_udp_wmem_min);
 atomic_long_t udp_memory_allocated;
 EXPORT_SYMBOL(udp_memory_allocated);
 
+/*ZTE_LC_TCP_DEBUG, 20170417 improved  start*/
+extern int tcp_socket_debugfs;
+/*ZTE_LC_TCP_DEBUG,  end*/
+
 #define MAX_UDP_PORTS 65536
 #define PORTS_PER_CHAIN (MAX_UDP_PORTS / UDP_HTABLE_SIZE_MIN)
 
@@ -1258,7 +1262,6 @@ int udp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 	int peeked, off = 0;
 	int err;
 	int is_udplite = IS_UDPLITE(sk);
-	bool checksum_valid = false;
 	bool slow;
 
 	if (flags & MSG_ERRQUEUE)
@@ -1284,12 +1287,11 @@ try_again:
 	 */
 
 	if (copied < ulen || UDP_SKB_CB(skb)->partial_cov) {
-		checksum_valid = !udp_lib_checksum_complete(skb);
-		if (!checksum_valid)
+		if (udp_lib_checksum_complete(skb))
 			goto csum_copy_err;
 	}
 
-	if (checksum_valid || skb_csum_unnecessary(skb))
+	if (skb_csum_unnecessary(skb))
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr),
 					      msg->msg_iov, copied);
 	else {
@@ -1664,6 +1666,16 @@ static int __udp4_lib_mcast_deliver(struct net *net, struct sk_buff *skb,
 	unsigned int count = 0, offset = offsetof(typeof(*sk), sk_nulls_node);
 	unsigned int hash2 = 0, hash2_any = 0, use_hash2 = (hslot->count > 10);
 
+	if ((tcp_socket_debugfs & 0x00000001)) {       /*ZTE_PM_TCP  lcf@20160523*/
+		pr_info("[IP] UDP RCV Multicasts len=%d , "
+			"%d (%s) [%d (%s)] (%pI4:%hu <- %pI4:%hu)\n",
+			ntohs(ip_hdr(skb)->tot_len),
+			current->group_leader->pid, current->group_leader->comm,
+			current->pid, current->comm,
+			&daddr, ntohs(uh->dest),
+			&saddr, ntohs(uh->source));
+		}
+
 	if (use_hash2) {
 		hash2_any = udp4_portaddr_hash(net, htonl(INADDR_ANY), hnum) &
 			    udp_table.mask;
@@ -1773,6 +1785,19 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		struct dst_entry *dst = skb_dst(skb);
 		int ret;
 
+		if ((tcp_socket_debugfs & 0x00000001)) {       /*ZTE_PM_TCP  lcf@20160523*/
+			kuid_t uid = sock_i_uid(sk);
+
+			pr_info("[IP] UDP RCV len=%d uid=%d, "
+				"Gpid:%d (%s) [%d (%s)] (%pI4:%hu <- %pI4:%hu)\n",
+				ntohs(ip_hdr(skb)->tot_len),
+				uid.val,
+				current->group_leader->pid, current->group_leader->comm,
+				current->pid, current->comm,
+				&daddr, ntohs(uh->dest),
+				&saddr, ntohs(uh->source));
+		}
+
 		if (unlikely(sk->sk_rx_dst != dst))
 			udp_sk_rx_dst_set(sk, dst);
 
@@ -1799,6 +1824,18 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 			skb_checksum_try_convert(skb, IPPROTO_UDP, uh->check,
 						 inet_compute_pseudo);
 
+		if ((tcp_socket_debugfs & 0x00000001)) {       /*ZTE_PM_TCP  lcf@20160523*/
+			kuid_t uid = sock_i_uid(sk);
+
+			pr_info("[IP] UDP RCV len = %hu uid=%d, "
+				" %d (%s) [%d (%s)] (%pI4:%hu <- %pI4:%hu)\n",
+				ulen,
+				uid.val,
+				current->group_leader->pid, current->group_leader->comm,
+				current->pid, current->comm,
+				&daddr, ntohs(uh->dest),
+				&saddr, ntohs(uh->source));
+		}
 		ret = udp_queue_rcv_skb(sk, skb);
 		sock_put(sk);
 

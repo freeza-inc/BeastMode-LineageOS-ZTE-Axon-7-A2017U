@@ -348,14 +348,19 @@ int ip_output(struct sock *sk, struct sk_buff *skb)
 	if ((tcp_socket_debugfs & 0x00000002) || ip_log_pm == 1) {       /*ZTE_PM_TCP  lcf@20160523*/
 		char stmp[50], dtmp[50];
 		const struct iphdr *iph;
+		kuid_t uid = GLOBAL_ROOT_UID;
 
 		iph = ip_hdr(skb);
 		if (strcmp(inet_ntop(AF_INET, &iph->daddr, dtmp, 50), "127.0.0.1")) {
+			if (skb->sk)
+				uid = sock_i_uid(skb->sk);
+
 			if (iph->protocol == IPPROTO_TCP) {
 				struct tcphdr *th = (struct tcphdr *)(skb->data+(iph->ihl<<2));
 /*ignore checking tcp pkts correct*/
-				pr_info("[IP]  TCP SEND len = %d, Gpid:%d (%s) [pid:%d (%s)],  (%s:%d -> %s:%d),F:%d%d%d%d%d%d%d%d\n",
+				pr_info("[IP]  TCP SEND len = %d, uid=%d, Gpid:%d (%s) [pid:%d (%s)], (%s:%d -> %s:%d),F:%d%d%d%d%d%d%d%d\n",
 					ntohs(iph->tot_len),
+					uid.val,
 					current->group_leader->pid, current->group_leader->comm,
 					current->pid, current->comm,
 					inet_ntop(AF_INET, &iph->saddr, stmp, 50), ntohs(th->source),
@@ -364,8 +369,9 @@ int ip_output(struct sock *sk, struct sk_buff *skb)
 			} else if (iph->protocol == IPPROTO_UDP) {
 				struct udphdr *uh = (struct udphdr *)(skb->data+(iph->ihl<<2));
 /*ignore checking udp pkts correct*/
-				pr_info("[IP]  UDP SEND len = %d, Gpid:%d (%s) [pid:%d (%s)],  (%s:%d -> %s:%d)\n",
+				pr_info("[IP]  UDP SEND len = %d, uid=%d, Gpid:%d (%s) [pid:%d (%s)],  (%s:%d -> %s:%d)\n",
 					ntohs(iph->tot_len),
+					uid.val,
 					current->group_leader->pid, current->group_leader->comm,
 					current->pid, current->comm,
 					inet_ntop(AF_INET, &iph->saddr, stmp, 50), ntohs(uh->source),
@@ -373,16 +379,18 @@ int ip_output(struct sock *sk, struct sk_buff *skb)
 			} else if (iph->protocol == IPPROTO_ICMP) {
 				struct icmphdr *icmph = (struct icmphdr *)(skb->data+(iph->ihl<<2));
 /*ignore checking icmp pkts correct*/
-				pr_info("[IP]  ICMP SEND len = %d, Gpid:%d (%s) [pid:%d (%s)],  (%s -> %s) , T: %d,C: %d\n",
+				pr_info("[IP]  ICMP SEND len = %d, uid=%d, Gpid:%d (%s) [pid:%d (%s)],  (%s -> %s) , T: %d,C: %d\n",
 					ntohs(iph->tot_len),
+					uid.val,
 					current->group_leader->pid, current->group_leader->comm,
 					current->pid, current->comm,
 					inet_ntop(AF_INET, &iph->saddr, stmp, 50),
 					inet_ntop(AF_INET, &iph->daddr, dtmp, 50),
 					icmph->type, icmph->code);
 			} else
-				pr_info("[IP]  SEND len = %d, Gpid:%d (%s) [pid:%d (%s)], (%s -> %s), TP = %d\n",
+				pr_info("[IP]  SEND len = %d, uid=%d, Gpid:%d (%s) [pid:%d (%s)], (%s -> %s), TP = %d\n",
 					ntohs(iph->tot_len),
+					uid.val,
 					current->group_leader->pid, current->group_leader->comm,
 					current->pid, current->comm,
 					inet_ntop(AF_INET, &iph->saddr, stmp, 50),

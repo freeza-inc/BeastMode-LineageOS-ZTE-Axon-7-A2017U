@@ -269,15 +269,17 @@ static void tcp_ecn_rcv_synack(struct tcp_sock *tp, const struct tcphdr *th)
 	if (tcp_socket_debugfs & 0x00000001) {
 		struct inet_sock *inet = &tp->inet_conn.icsk_inet;
 		char stmp[50], dtmp[50];
+		bool is_ipv6hdr = false;
 
 #if IS_ENABLED(CONFIG_IPV6)
 		if ((AF_INET6 == inet->sk.sk_family) && (IPV6_ADDR_MAPPED ==
 			ipv6_addr_type(&((struct ipv6_pinfo *)(inet6_sk(&inet->sk)))->saddr))) {
-#else
-		if (AF_INET == inet->sk.sk_family) {
+			is_ipv6hdr = true;
+		}
 #endif
+		if (is_ipv6hdr || AF_INET == inet->sk.sk_family) {
 			if (strcmp(inet_ntop(AF_INET, &inet->inet_saddr, stmp, 50), "127.0.0.1"))
-				pr_info("[TCP] ESTAB pid = %d (%s), Gpid = %d (%s) (%s:%d <- %s:%d)\n",
+				pr_info("[TCP] ESTAB pid:%d (%s), Gpid:%d (%s) (%s:%d <- %s:%d)\n",
 					current->pid, current->comm,
 					current->group_leader->pid, current->group_leader->comm,
 					inet_ntop(AF_INET, &inet->inet_saddr, stmp, 50),
@@ -667,16 +669,18 @@ static void tcp_event_data_recv(struct sock *sk, struct sk_buff *skb)
 	if (tcp_socket_debugfs & 0x00000001) {
 		struct inet_sock *inet = inet_sk(sk);
 		char stmp[50], dtmp[50];
+		bool is_ipv6hdr = false;
 
 		if (skb->len) {
 #if IS_ENABLED(CONFIG_IPV6)
 			if ((AF_INET6 == sk->sk_family) && (IPV6_ADDR_MAPPED ==
 				ipv6_addr_type(&((struct ipv6_pinfo *)(inet6_sk(sk)))->saddr))) {
-#else
-			if (AF_INET == inet->sk.sk_family) {
+				is_ipv6hdr = true;
+			}
 #endif
+			if (is_ipv6hdr || AF_INET == inet->sk.sk_family) {
 				if (strcmp(inet_ntop(AF_INET, &inet->inet_saddr, stmp, 50), "127.0.0.1"))
-					pr_info("[TCP] Rx D_len = %d , pid = %d (%s) , Gpid = %d (%s)  (%s:%d <- %s:%d)\n",
+					pr_info("[TCP] Rx D_len = %d , pid:%d (%s) , Gpid:%d (%s)  (%s:%d <- %s:%d)\n",
 						skb->len, current->pid, current->comm,
 						current->group_leader->pid,	current->group_leader->comm,
 						inet_ntop(AF_INET, &inet->inet_saddr, stmp, 50),

@@ -388,7 +388,6 @@ int udpv6_recvmsg(struct kiocb *iocb, struct sock *sk,
 	int peeked, off = 0;
 	int err;
 	int is_udplite = IS_UDPLITE(sk);
-	bool checksum_valid = false;
 	int is_udp4;
 	bool slow;
 
@@ -420,12 +419,11 @@ try_again:
 	 */
 
 	if (copied < ulen || UDP_SKB_CB(skb)->partial_cov) {
-		checksum_valid = !udp_lib_checksum_complete(skb);
-		if (!checksum_valid)
+		if (udp_lib_checksum_complete(skb))
 			goto csum_copy_err;
 	}
 
-	if (checksum_valid || skb_csum_unnecessary(skb))
+	if (skb_csum_unnecessary(skb))
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr),
 					      msg->msg_iov, copied);
 	else {
@@ -836,6 +834,7 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	struct udphdr *uh;
 	const struct in6_addr *saddr, *daddr;
 	u32 ulen = 0;
+	kuid_t uid = GLOBAL_ROOT_UID;
 
 	if (!pskb_may_pull(skb, sizeof(struct udphdr)))
 		goto discard;
@@ -906,6 +905,17 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		if (ret > 0)
 			return -ret;
 
+		if ((tcp_socket_debugfs & 0x00000001)) {    /*ZTE_LC_TCP_DEBUG, 20170418 improved*/
+			uid = sock_i_uid(sk);
+			pr_info("[IP] UDP RCV len = %hu uid=%d, "
+				"Gpid:%d (%s) [%d (%s)] (%pI6:%hu <- %pI6:%hu)\n",
+				ulen,
+				uid.val,
+				current->group_leader->pid, current->group_leader->comm,
+				current->pid, current->comm,
+				&ip_hdr(skb)->daddr, ntohs(uh->dest),
+				&ip_hdr(skb)->saddr, ntohs(uh->source));
+		}
 		return 0;
 	}
 

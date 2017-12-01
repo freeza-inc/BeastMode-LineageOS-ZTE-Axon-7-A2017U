@@ -460,29 +460,10 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 /*here it is IPV4 */
 /*regardless swapper process, loop device */
 		if (strcmp(inet_ntop(AF_INET, &iph->daddr, dtmp, 50), "127.0.0.1")) {
-			if (iph->protocol == IPPROTO_TCP) {
-				struct tcphdr *th = (struct tcphdr *)(skb->data+(iph->ihl<<2));
-/*ignore checking tcp pkts correct*/
-				pr_info("[IP]  TCP RCV len = %d, %d (%s) [%d (%s)],  (%s:%d <- %s:%d),F:%d%d%d%d%d%d%d%d\n",
-					ntohs(iph->tot_len),
-					current->group_leader->pid, current->group_leader->comm,
-					current->pid, current->comm,
-					inet_ntop(AF_INET, &iph->daddr, stmp, 50), ntohs(th->dest),
-					inet_ntop(AF_INET, &iph->saddr, dtmp, 50), ntohs(th->source),
-					th->cwr, th->ece, th->urg, th->ack, th->psh, th->rst, th->syn, th->fin);
-			} else if (iph->protocol == IPPROTO_UDP) {
-				struct udphdr *uh = (struct udphdr *)(skb->data+(iph->ihl<<2));
-/*ignore checking udp pkts correct*/
-				pr_info("[IP]  UDP RCV len = %d, %d (%s) [%d (%s)],  (%s:%d <- %s:%d)\n",
-					ntohs(iph->tot_len),
-					current->group_leader->pid, current->group_leader->comm,
-					current->pid, current->comm,
-					inet_ntop(AF_INET, &iph->daddr, stmp, 50), ntohs(uh->dest),
-					inet_ntop(AF_INET, &iph->saddr, dtmp, 50), ntohs(uh->source));
-			} else if (iph->protocol == IPPROTO_ICMP) {
+			if (iph->protocol == IPPROTO_ICMP) {
 				struct icmphdr *icmph = (struct icmphdr *)(skb->data+(iph->ihl<<2));
 /*ignore checking icmp pkts correct*/
-				pr_info("[IP]  ICMP RCV len = %d, %d (%s) [%d (%s)],  (%s <- %s) , T: %d,C: %d\n",
+				pr_info("[IP]  ICMP RCV len = %d, Gpid:%d (%s) [pid:%d (%s)],  (%s <- %s) , T: %d,C: %d\n",
 					ntohs(iph->tot_len),
 					current->group_leader->pid, current->group_leader->comm,
 					current->pid, current->comm,
@@ -490,7 +471,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 					inet_ntop(AF_INET, &iph->saddr, dtmp, 50),
 					icmph->type, icmph->code);
 			} else
-				pr_info("[IP]  RCV len = %d, %d (%s) [%d (%s)], (%s <- %s), TP = %d\n",
+				pr_info("[IP]  RCV len = %d, Gpid:%d (%s) [pid:%d (%s)], (%s <- %s), TP = %d\n",
 					ntohs(iph->tot_len),
 					current->group_leader->pid, current->group_leader->comm,
 					current->pid, current->comm,

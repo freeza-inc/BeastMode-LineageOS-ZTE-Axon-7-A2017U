@@ -1420,7 +1420,7 @@ static struct sock *tcp_v4_hnd_req(struct sock *sk, struct sk_buff *skb)
 }
 
 /* The socket must have it's spinlock held when we get
- * here, unless it is a TCP_LISTEN socket.
+ * here.
  *
  * We have a potential double-lock case here, so even when
  * doing backlog processing we use the BH locking scheme.
@@ -1666,20 +1666,30 @@ process:
 
 	if (sk_filter(sk, skb))
 		goto discard_and_relse;
+	th = (const struct tcphdr *)skb->data;
+	iph = ip_hdr(skb);
 
 	sk_mark_napi_id(sk, skb);
 	skb->dev = NULL;
-
-	if (sk->sk_state == TCP_LISTEN) {
-		ret = tcp_v4_do_rcv(sk, skb);
-		goto put_and_return;
-	}
 
 	bh_lock_sock_nested(sk);
 	ret = 0;
 	if (!sock_owned_by_user(sk)) {
 		if (!tcp_prequeue(sk, skb))
 			ret = tcp_v4_do_rcv(sk, skb);
+/*ZTE_LC_TCP_DEBUG, 20170417 improved */
+		if (tcp_socket_debugfs & 0x00000001) {
+			kuid_t uid = sock_i_uid(sk);
+
+			pr_info("[IP] TCP RCV len = %hu uid=%d, "
+				"Gpid:%d (%s) [%d (%s)] (%pI4:%hu <- %pI4:%hu)\n",
+				ntohs(iph->tot_len),
+				uid.val,
+				current->group_leader->pid, current->group_leader->comm,
+				current->pid, current->comm,
+				&iph->daddr, ntohs(th->dest),
+				&iph->saddr, ntohs(th->source));
+		}
 	} else if (unlikely(sk_add_backlog(sk, skb,
 					   sk->sk_rcvbuf + sk->sk_sndbuf))) {
 		bh_unlock_sock(sk);
@@ -1688,7 +1698,6 @@ process:
 	}
 	bh_unlock_sock(sk);
 
-put_and_return:
 	sock_put(sk);
 
 	return ret;
