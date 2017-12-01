@@ -259,7 +259,7 @@ static int __init isl98608_init(void)
 
 	pr_info("%s \n",__func__);
 
-	return i2c_add_driver(&isl98608_i2c_driver);
+	return i2c_add_driver_async(&isl98608_i2c_driver);
 }
 
 module_init(isl98608_init);

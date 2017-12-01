@@ -1530,7 +1530,7 @@ static int __init ak4490_modinit(void)
 
 	akdbgprt("\t[AK4490] %s(%d)\n", __FUNCTION__,__LINE__);
 
-	return i2c_add_driver(&ak4490_i2c_driver);
+	return i2c_add_driver_async(&ak4490_i2c_driver);
 }
 
 module_init(ak4490_modinit);
