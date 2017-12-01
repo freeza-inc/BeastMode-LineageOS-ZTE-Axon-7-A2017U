@@ -219,12 +219,10 @@ enum qca_nl80211_vendor_subcmds {
     /* Start Wifi Memory Dump */
     QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_MEMORY_DUMP = 63,
     QCA_NL80211_VENDOR_SUBCMD_ROAM = 64,
-
-    /*
-     * APIs corresponding to the sub commands 65-68 are deprecated.
-     * These sub commands are reserved and not supposed to be used
-     * for any other purpose
-     */
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_SET_SSID_HOTLIST = 65,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_RESET_SSID_HOTLIST = 66,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND = 67,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST = 68,
     QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_SET_LIST = 69,
     QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_SET_PASSPOINT_LIST = 70,
     QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_RESET_PASSPOINT_LIST = 71,
@@ -271,6 +269,9 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_ACS_POLICY = 116,
 	QCA_NL80211_VENDOR_SUBCMD_STA_CONNECT_ROAM_POLICY = 117,
 	QCA_NL80211_VENDOR_SUBCMD_SET_SAP_CONFIG  = 118,
+
+	/* subcommand for link layer statistics extension */
+	QCA_NL80211_VENDOR_SUBCMD_LL_STATS_EXT = 127,
 };
 
 enum qca_nl80211_vendor_subcmds_index {
@@ -309,6 +310,7 @@ enum qca_nl80211_vendor_subcmds_index {
     QCA_NL80211_VENDOR_SUBCMD_LL_RADIO_STATS_INDEX,
     QCA_NL80211_VENDOR_SUBCMD_LL_IFACE_STATS_INDEX,
     QCA_NL80211_VENDOR_SUBCMD_LL_PEER_INFO_STATS_INDEX,
+    QCA_NL80211_VENDOR_SUBCMD_LL_STATS_EXT_INDEX,
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
     /* EXT TDLS */
     QCA_NL80211_VENDOR_SUBCMD_TDLS_STATE_CHANGE_INDEX,
@@ -329,6 +331,12 @@ enum qca_nl80211_vendor_subcmds_index {
     QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_PASSPOINT_NETWORK_FOUND_INDEX,
 #endif /* FEATURE_WLAN_EXTSCAN */
 
+#ifdef FEATURE_WLAN_EXTSCAN
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_SET_SSID_HOTLIST_INDEX,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_RESET_SSID_HOTLIST_INDEX,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND_INDEX,
+    QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST_INDEX,
+#endif
     /* OCB events */
     QCA_NL80211_VENDOR_SUBCMD_DCC_STATS_EVENT_INDEX,
 #ifdef WLAN_FEATURE_MEMDUMP
@@ -782,6 +790,10 @@ enum qca_wlan_vendor_attr_extscan_results
     /* Unsigned 32bit value; a EXTSCAN Capabilities attribute. */
     QCA_WLAN_VENDOR_ATTR_EXTSCAN_RESULTS_CAPABILITIES_MAX_NUM_WHITELISTED_SSID,
 
+    /* EXTSCAN attributes for
+     * QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND sub-command &
+     * QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST sub-command
+     */
     /* Use attr QCA_WLAN_VENDOR_ATTR_EXTSCAN_NUM_RESULTS_AVAILABLE
      * to indicate number of results.
      */
@@ -792,6 +804,11 @@ enum qca_wlan_vendor_attr_extscan_results
      */
     QCA_WLAN_VENDOR_ATTR_EXTSCAN_RESULTS_BUCKETS_SCANNED,
 
+    /*
+     * Unsigned 32bit value; a EXTSCAN Capabilities attribute to send maximum
+     * number of blacklist bssid's that firmware can support.
+     */
+    QCA_WLAN_VENDOR_ATTR_EXTSCAN_MAX_NUM_BLACKLISTED_BSSID,
 
     /* keep last */
     QCA_WLAN_VENDOR_ATTR_EXTSCAN_RESULTS_AFTER_LAST,
@@ -2013,9 +2030,73 @@ enum qca_vendor_attr_txpower_scale_decr_db {
 		QCA_WLAN_VENDOR_ATTR_TXPOWER_SCALE_DECR_DB_AFTER_LAST - 1
 };
 
+/**
+ * enum qca_wlan_vendor_attr_ll_stats_ext - Attributes for MAC layer monitoring
+ *    offload which is an extension for LL_STATS.
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_CFG_PERIOD: Monitoring period. Unit in ms.
+ *    If MAC counters do not exceed the threshold, FW will report monitored
+ *    link layer counters periodically as this setting. The first report is
+ *    always triggered by this timer.
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_CFG_THRESHOLD: It is a percentage(1 ~ 99).
+ *    For each MAC layer counter, FW holds two copies. One is the current value.
+ *    The other is the last report. Once a current counter's increment is larger
+ *    than the theshold, FW will indicate that counter to host even the
+ *    monitoring timer does not expire.
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_MAC_ADDRESS: Peer sta's MAC address
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_PS_CHG: Peer sta power state change
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_PS_STATE: Current power state of
+ *    peer STA.
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_TID: TID of msdu
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_NUM_MSDU: Count of msdu with the same
+ *    failure code.
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_TX_STATUS: TX failure code
+ *    1: TX packet discarded
+ *    2: No ACK
+ *    3: Postpone
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_MAC_ADDRESS: peer MAC address
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_PS_STATE: Peer STA current state
+ * @QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_NUM: number of peers
+*/
+enum qca_wlan_vendor_attr_ll_stats_ext {
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_INVALID = 0,
+
+	/* Attributes for configurations */
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_CFG_PERIOD,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_CFG_THRESHOLD,
+
+	/* Peer STA power state change */
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_PS_CHG,
+
+	/* TX failure event */
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_TID,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_NUM_MSDU,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_TX_STATUS,
+
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_PS_STATE,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_MAC_ADDRESS,
+
+	/* MAC counters */
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_GLOBAL,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_EVENT_MODE,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_IFACE_ID,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_ID,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_TX_BITMAP,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_RX_BITMAP,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_CCA_BSS_BITMAP,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_SIGNAL_BITMAP,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_PEER_NUM,
+
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_LAST,
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_MAX =
+		QCA_WLAN_VENDOR_ATTR_LL_STATS_EXT_LAST - 1
+};
+
 struct cfg80211_bss* wlan_hdd_cfg80211_update_bss_db( hdd_adapter_t *pAdapter,
                                       tCsrRoamInfo *pRoamInfo
                                       );
+
+int wlan_hdd_cfg80211_update_bss(struct wiphy *wiphy,
+			hdd_adapter_t *pAdapter);
 
 #ifdef FEATURE_WLAN_LFR
 int wlan_hdd_cfg80211_pmksa_candidate_notify(
@@ -2081,8 +2162,6 @@ extern void wlan_hdd_cfg80211_update_replayCounterCallback(void *callbackContext
 void* wlan_hdd_change_country_code_cb(void *pAdapter);
 void hdd_select_cbmode(hdd_adapter_t *pAdapter, v_U8_t operationChannel,
                 uint16_t *ch_width);
-void hdd_select_mon_cbmode(hdd_adapter_t *adapter, v_U8_t operation_channel,
-                           uint16_t *ch_width);
 
 v_U8_t* wlan_hdd_cfg80211_get_ie_ptr(const v_U8_t *pIes,
                                      int length,

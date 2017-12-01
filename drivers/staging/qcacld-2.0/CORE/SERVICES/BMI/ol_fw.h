@@ -156,6 +156,7 @@ u_int8_t ol_get_number_of_peers_supported(struct ol_softc *scn);
 #ifdef REMOVE_PKT_LOG
 static inline void ol_pktlog_init(void *)
 {
+
 }
 #else
 void ol_pktlog_init(void *);
