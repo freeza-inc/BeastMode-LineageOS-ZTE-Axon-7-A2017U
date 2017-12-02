@@ -219,10 +219,10 @@ static unsigned long ksm_pages_unshared;
 static unsigned long ksm_rmap_items;
 
 /* Number of pages ksmd should scan in one batch */
-static unsigned int ksm_thread_pages_to_scan = 100;
+static unsigned int ksm_thread_pages_to_scan = 250;
 
 /* Milliseconds ksmd should sleep between batches */
-static unsigned int ksm_thread_sleep_millisecs = 20;
+static unsigned int ksm_thread_sleep_millisecs = 1500;
 
 /* Boolean to indicate whether to use deferred timer or not */
 static bool use_deferred_timer;
@@ -235,6 +235,9 @@ static int ksm_nr_node_ids = 1;
 #define ksm_merge_across_nodes	1U
 #define ksm_nr_node_ids		1
 #endif
+
+/* Boolean to indicate whether to use deferred timer or not */
+static bool use_deferred_timer = true;
 
 #define KSM_RUN_STOP	0
 #define KSM_RUN_MERGE	1
